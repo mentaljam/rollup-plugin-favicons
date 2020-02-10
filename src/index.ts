@@ -21,6 +21,10 @@ const pluginFavicons: PluginFactory = ({
 }) => ({
   name: 'favicons',
 
+  buildStart() {
+    this.addWatchFile(source)
+  },
+
   async generateBundle(options, bundle) {
     const emit = ({name, contents}: IFaviconOutput) => bundle[name] = {
       fileName: name,
