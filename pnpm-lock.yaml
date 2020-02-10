@@ -1,9 +1,11 @@
 dependencies:
   favicons: 5.5.0
+  object-hash: 2.0.1
 devDependencies:
   '@types/favicons': 5.5.0
   '@types/html-minifier': 3.5.3
   '@types/node': 13.7.0
+  '@types/object-hash': 1.3.1
   rollup: 1.31.0
   rollup-plugin-html2: 0.7.0_b9573f1268f9839f5e95786a47e3f324
   typescript: 3.7.5
@@ -391,6 +393,10 @@ packages:
     dev: true
     resolution:
       integrity: sha512-GnZbirvmqZUzMgkFn70c74OQpTTUcCzlhQliTzYjQMqg+hVKcDnxdL19Ne3UdYzdMA/+W3eb646FWn/ZaT1NfQ==
+  /@types/object-hash/1.3.1:
+    dev: true
+    resolution:
+      integrity: sha512-xhLwbVGAXi/LJEowMjRY1anbF5sQWeuocVjaMrFYy4bOEpl79A4eIby3xlowbkXytUdbISwOZB+vQx9Y/n0p8A==
   /@types/relateurl/0.2.28:
     dev: true
     resolution:
@@ -1161,6 +1167,12 @@ packages:
       node: '>=0.10.0'
     resolution:
       integrity: sha1-IQmtx5ZYh8/AXLvUQsrIv7s2CGM=
+  /object-hash/2.0.1:
+    dev: false
+    engines:
+      node: '>= 6'
+    resolution:
+      integrity: sha512-HgcGMooY4JC2PBt9sdUdJ6PMzpin+YtY3r/7wg0uTifP+HJWW8rammseSEHuyt0UeShI183UGssCJqm1bJR7QA==
   /omggif/1.0.10:
     dev: false
     resolution:
@@ -1782,7 +1794,9 @@ specifiers:
   '@types/favicons': ^5.5.0
   '@types/html-minifier': ^3.5.3
   '@types/node': ^13.7.0
+  '@types/object-hash': ^1.3.1
   favicons: ^5.5.0
+  object-hash: ^2.0.1
   rollup: ^1.31.0
   rollup-plugin-html2: ^0.7.0
   typescript: ^3.7.5
