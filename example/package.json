@@ -1,0 +1,15 @@
+{
+  "name": "rollup-plugin-favicons-example",
+  "version": "1.0.0",
+  "description": "Usage example for the rollup-plugin-favicons.",
+  "author": "Petr Tsymbarovich <petr@tsymbarovich.ru>",
+  "license": "MIT",
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "devDependencies": {
+    "rollup": "^2.26.3",
+    "rollup-plugin-favicons": "../",
+    "rollup-plugin-html2": "^2.0.0"
+  }
+}
