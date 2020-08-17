@@ -1,10 +1,10 @@
 import {createHash} from 'crypto'
-import * as favicon from 'favicons'
-import * as fs from 'fs'
-import * as path from 'path'
-import * as objectHash from 'object-hash'
-import {OutputAsset, OutputOptions, Plugin, PluginContext} from 'rollup'
-import {IExtendedOptions} from 'rollup-plugin-html2'
+import favicon from 'favicons'
+import fs from 'fs'
+import path from 'path'
+import objectHash from 'object-hash'
+import {OutputOptions, Plugin, PluginContext} from 'rollup'
+import {IExtendedOptions} from 'rollup-plugin-html2/dist/types'
 
 
 interface IPluginConfig {
@@ -45,8 +45,8 @@ const checkCache = ({
   return [cacheDir, cacheIndex]
 }
 
-type processFavicon = (favicon: IFaviconOutput) => void
-type processFile    = (file: string)            => void
+type processFavicon = (favicon: IFaviconOutput) => string
+type processFile    = (file: string)            => string
 
 function processOutput(
   options:               OutputOptions,
@@ -63,9 +63,27 @@ function processOutput(
   {images, files, html}: favicon.FavIconResponse | ICacheIndex,
   processor:             processFavicon | processFile,
 ): void {
-  images.forEach(processor as any)
-  files.forEach(processor as any);
+  const fileMap: Record<string, string> = {}
+  const wrapper = (entry: IFaviconOutput | string) => {
+    const key = typeof entry === 'string'
+      ? entry
+      : entry.name
+    fileMap[key] = (processor as (e: unknown) => string)(entry)
+  }
+  images.forEach(wrapper)
+  const imagesRegex = new RegExp(Object.keys(fileMap).join('|').replace('.', '\\.'), 'gm')
+  files.forEach((f: IFaviconOutput | string) => {
+    if (typeof f !== 'string') {
+      f.contents = Buffer.from(f.contents.toString().replace(imagesRegex, substr => path.basename(fileMap[substr])))
+    }
+    wrapper(f)
+  });
   (options as IExtendedOptions).__favicons_output = html
+    .map(s => s.replace(/href="(.*)"/, (href, file) => {
+        file = fileMap[path.basename(file)]
+        return file ? `href="${file}"` : href
+      })
+    )
 }
 
 const generateFavicons = async (
@@ -77,7 +95,6 @@ const generateFavicons = async (
   } catch (error) {
     context.error(error)
   }
-  return null
 }
 
 const formatCacheIndex = ({files, html, images}: favicon.FavIconResponse) => {
@@ -96,12 +113,16 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
     this.addWatchFile(pluginConfig.source)
   },
 
-  async generateBundle(options, bundle) {
-    const emit = ({name, contents}: IFaviconOutput) => bundle[name] = {
-      fileName: name,
-      source:   contents,
-      type:    'asset',
-    } as OutputAsset
+  async generateBundle(options) {
+    const emit = ({name, contents: source}: IFaviconOutput) => this.getFileName(this.emitFile({
+      name,
+      source,
+      type: 'asset',
+    }))
+
+    if (typeof options.assetFileNames === 'string') {
+      pluginConfig.configuration.path = path.dirname(options.assetFileNames)
+    }
 
     const [cacheDir, cacheIndex] = checkCache(pluginConfig)
 
@@ -111,7 +132,7 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
       const output = JSON.parse(index) as ICacheIndex
       processOutput(options, output, (name: string) => {
         const contents = fs.readFileSync(path.resolve(cacheDir, name))
-        emit({name, contents})
+        return emit({name, contents})
       })
       return
     }
@@ -133,7 +154,7 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
     fs.writeFileSync(cacheIndex, formatCacheIndex(output))
     processOutput(options, output, (fout: IFaviconOutput) => {
       fs.writeFileSync(path.resolve(cacheDir, fout.name), fout.contents)
-      emit(fout)
+      return emit(fout)
     })
   }
 })
