@@ -90,10 +90,10 @@ function processOutput(
     )
 }
 
-function createResponseFromCache({ files, html, images }: ICacheIndex): FavIconResponse {
+function createResponseFromCache({ files, html, images }: ICacheIndex, cacheDir: string): FavIconResponse {
   return {
-    images: images.map((imageEntry => ({ name: imageEntry, contents: Buffer.from(imageEntry, 'utf-8')}))),
-    files: files.map((fileEntry => ({ name: fileEntry, contents: Buffer.from(fileEntry, 'utf-8')}))),
+    images: images.map((imageEntry => ({ name: imageEntry, contents: fs.readFileSync(path.join(cacheDir, imageEntry))}))),
+    files: files.map((fileEntry => ({ name: fileEntry, contents: fs.readFileSync(path.join(cacheDir, fileEntry))}))),
     html: html.slice()
   }
 }
@@ -149,7 +149,7 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
       const { callback } = pluginConfig;
 
       if (callback) {
-        const responseFromCache = createResponseFromCache(output);
+        const responseFromCache = createResponseFromCache(output, cacheDir);
         callback(null, responseFromCache)
       }
 
