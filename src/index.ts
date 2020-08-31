@@ -148,16 +148,23 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
 
       const { callback } = pluginConfig;
 
+      let callbackResponse;
+
       if (callback) {
         const responseFromCache = createResponseFromCache(output, cacheDir);
-        callback(null, responseFromCache)
+        callbackResponse = callback(null, responseFromCache)
+      } else {
+        callbackResponse = true;
       }
 
-      processOutput(options, output as ICacheIndex, ((name: string) => {
-        const contents = fs.readFileSync(path.resolve(cacheDir, name))
-        return emit({name, contents})
-      }) as processFile)
-      return
+      if (callbackResponse) {
+        processOutput(options, output as ICacheIndex, ((name: string) => {
+          const contents = fs.readFileSync(path.resolve(cacheDir, name))
+          return emit({name, contents})
+        }) as processFile)
+      }
+
+      return;
     }
 
     // Try to generate files
