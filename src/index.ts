@@ -133,7 +133,7 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
       name,
       source,
       type: 'asset',
-    })): () => {}
+    })): ({ name }) => name;
 
     if (typeof options.assetFileNames === 'string') {
       pluginConfig.configuration.path = path.dirname(options.assetFileNames)
