@@ -129,15 +129,17 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
   },
 
   async generateBundle(options) {
-    const emit = pluginConfig.emitAssets !== false ? ({name, contents: source}: IFaviconOutput) => this.getFileName(this.emitFile({
+    const { emitAssets, configuration } = pluginConfig;
+    
+    if (typeof options.assetFileNames === 'string') {
+      configuration.path = path.dirname(options.assetFileNames)
+    }
+    
+    const emit = emitAssets !== false ? ({name, contents: source}: IFaviconOutput) => this.getFileName(this.emitFile({
       name,
       source,
       type: 'asset',
-    })): ({ name }: IFaviconOutput) => name;
-
-    if (typeof options.assetFileNames === 'string') {
-      pluginConfig.configuration.path = path.dirname(options.assetFileNames)
-    }
+    })): ({ name }: IFaviconOutput) => path.join(configuration.path || '', name);
 
     const [cacheDir, cacheIndex] = checkCache(pluginConfig)
 
