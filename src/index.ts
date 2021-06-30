@@ -1,5 +1,5 @@
 import {createHash} from 'crypto'
-import favicons, {Configuration, FavIconResponse} from 'favicons'
+import favicons, {FaviconOptions, FaviconResponse, FaviconImage, FaviconFile} from 'favicons'
 import fs from 'fs'
 import path from 'path'
 import objectHash from 'object-hash'
@@ -9,15 +9,12 @@ import {IExtendedOptions} from 'rollup-plugin-html2/dist/types'
 
 interface IPluginConfig {
   cache?:        boolean | string
-  configuration: Partial<Configuration>
+  configuration: Partial<FaviconOptions>
   source:        string
-  callback?:     (response: FavIconResponse) => void
+  callback?:     (response: FaviconResponse) => void
 }
 
-interface IFaviconOutput {
-  contents: Buffer
-  name:     string
-}
+type FaviconOutput = FaviconImage | FaviconFile
 
 interface ICacheIndex {
   images: string[]
@@ -49,30 +46,30 @@ const checkCache = ({
 const responseFromCache = (
   cacheDir:   string,
   cacheIndex: string,
-): FavIconResponse => {
+): FaviconResponse => {
   const index = fs.readFileSync(cacheIndex).toString()
   const {images, files, html} = JSON.parse(index) as ICacheIndex
-  const readFile = (name: string) => ({name, contents: fs.readFileSync(path.join(cacheDir, name))})
+  const readFile = (name: string) => fs.readFileSync(path.join(cacheDir, name))
   return {
-    images: images.map(readFile),
-    files:  files.map(readFile),
+    images: images.map(name => ({name, contents: readFile(name)})),
+    files:  files.map(name => ({name, contents: readFile(name).toString()})),
     html:   html.slice()
   }
 }
 
 const responseToCache = (
-  {images, files, html}: FavIconResponse,
+  {images, files, html}: FaviconResponse,
   cacheDir:              string,
   cacheIndex:            string,
 ): void => {
   fs.mkdirSync(cacheDir, {recursive: true})
-  const extractName = ({name}: IFaviconOutput) => name
+  const extractName = ({name}: FaviconOutput) => name
   fs.writeFileSync(cacheIndex, JSON.stringify({
     images: images.map(extractName),
     files:  files.map(extractName),
     html,
   }))
-  const writeFile = ({name, contents}: IFaviconOutput) => fs.writeFileSync(path.resolve(cacheDir, name), contents)
+  const writeFile = ({name, contents}: FaviconOutput) => fs.writeFileSync(path.resolve(cacheDir, name), contents)
   images.forEach(writeFile)
   files.forEach(writeFile)
 }
@@ -126,7 +123,7 @@ const pluginFavicons: RollupPluginFavicons = (pluginConfig) => ({
 
     // Real asset filenames can differ from what is written to `files` and `html`
     const assetsMap: Record<string, string> = {}
-    const emitAsset = ({name, contents}: IFaviconOutput) => {
+    const emitAsset = ({name, contents}: FaviconOutput) => {
       const id = this.emitFile({
         name,
         source: contents,
@@ -142,7 +139,7 @@ const pluginFavicons: RollupPluginFavicons = (pluginConfig) => ({
     const imagesRegex = new RegExp(Object.keys(assetsMap).join('|').replace('.', '\\.'), 'gm')
     files.forEach(f => {
       // Replace original image paths with actual ones
-      f.contents = Buffer.from(f.contents.toString().replace(imagesRegex, substr => path.basename(assetsMap[substr])))
+      f.contents = f.contents.toString().replace(imagesRegex, substr => path.basename(assetsMap[substr]))
       // Map original names of the files to their actual paths
       emitAsset(f)
     });
