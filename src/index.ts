@@ -1,5 +1,5 @@
 import {createHash} from 'crypto'
-import favicon from 'favicons'
+import favicon, {Callback, FavIconResponse} from 'favicons'
 import fs from 'fs'
 import path from 'path'
 import objectHash from 'object-hash'
@@ -11,6 +11,8 @@ interface IPluginConfig {
   cache?:        boolean | string
   configuration: Partial<favicon.Configuration>
   source:        string
+  callback?:     Callback;
+  emitAssets?:   boolean;
 }
 
 interface IFaviconOutput {
@@ -47,21 +49,23 @@ const checkCache = ({
 
 type processFavicon = (favicon: IFaviconOutput) => string
 type processFile    = (file: string)            => string
+type ProcessFunc = processFavicon | processFile;
+type ProcessData = favicon.FavIconResponse | ICacheIndex;
 
 function processOutput(
-  options:               OutputOptions,
-  {images, files, html}: favicon.FavIconResponse,
-  processor:             processFavicon,
-): void
+    options:               OutputOptions,
+    {images, files, html}: favicon.FavIconResponse,
+    processor:             processFavicon,
+): void;
+function processOutput(
+    options:               OutputOptions,
+    {images, files, html}: ICacheIndex,
+    processor:             processFile,
+): void;
 function processOutput(
   options:               OutputOptions,
-  {images, files, html}: ICacheIndex,
-  processor:             processFile,
-): void
-function processOutput(
-  options:               OutputOptions,
-  {images, files, html}: favicon.FavIconResponse | ICacheIndex,
-  processor:             processFavicon | processFile,
+  {images, files, html}: ProcessData,
+  processor:             ProcessFunc,
 ): void {
   const fileMap: Record<string, string> = {}
   const wrapper = (entry: IFaviconOutput | string) => {
@@ -86,16 +90,27 @@ function processOutput(
     )
 }
 
-const generateFavicons = async (
+function createResponseFromCache({ files, html, images }: ICacheIndex, cacheDir: string): FavIconResponse {
+  return {
+    images: images.map((imageEntry => ({ name: imageEntry, contents: fs.readFileSync(path.join(cacheDir, imageEntry))}))),
+    files: files.map((fileEntry => ({ name: fileEntry, contents: fs.readFileSync(path.join(cacheDir, fileEntry))}))),
+    html: html.slice()
+  }
+}
+
+const generateFavicons = (async (
   context: PluginContext,
-  {source, configuration}: IPluginConfig,
+  {source, configuration, callback }: IPluginConfig,
 ) => {
   try {
-    return await favicon(source, configuration)
+    return await favicon(source, configuration, callback)
   } catch (error) {
     context.error(error)
   }
-}
+}) as (
+    context: PluginContext,
+    {source, configuration, callback }: IPluginConfig,
+) => Promise<favicon.FavIconResponse | undefined>;
 
 const formatCacheIndex = ({files, html, images}: favicon.FavIconResponse) => {
   const extractName = ({name}: IFaviconOutput) => name
@@ -114,15 +129,17 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
   },
 
   async generateBundle(options) {
-    const emit = ({name, contents: source}: IFaviconOutput) => this.getFileName(this.emitFile({
+    const { emitAssets, configuration } = pluginConfig;
+    
+    if (typeof options.assetFileNames === 'string') {
+      configuration.path = path.dirname(options.assetFileNames)
+    }
+    
+    const emit = emitAssets !== false ? ({name, contents: source}: IFaviconOutput) => this.getFileName(this.emitFile({
       name,
       source,
       type: 'asset',
-    }))
-
-    if (typeof options.assetFileNames === 'string') {
-      pluginConfig.configuration.path = path.dirname(options.assetFileNames)
-    }
+    })): ({ name }: IFaviconOutput) => path.join(configuration.path || '', name);
 
     const [cacheDir, cacheIndex] = checkCache(pluginConfig)
 
@@ -130,32 +147,48 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
     if (cacheDir && fs.existsSync(cacheDir) && fs.existsSync(cacheIndex)) {
       const index  = fs.readFileSync(cacheIndex).toString()
       const output = JSON.parse(index) as ICacheIndex
-      processOutput(options, output, (name: string) => {
-        const contents = fs.readFileSync(path.resolve(cacheDir, name))
-        return emit({name, contents})
-      })
-      return
+
+      const { callback } = pluginConfig;
+
+      let callbackResponse;
+
+      if (callback) {
+        const responseFromCache = createResponseFromCache(output, cacheDir);
+        callbackResponse = callback(null, responseFromCache)
+      } else {
+        callbackResponse = true;
+      }
+
+      if (callbackResponse) {
+        processOutput(options, output as ICacheIndex, ((name: string) => {
+          const contents = fs.readFileSync(path.resolve(cacheDir, name))
+          return emit({name, contents})
+        }) as processFile)
+      }
+
+      return;
     }
 
     // Try to generate files
-    const output = await generateFavicons(this, pluginConfig)
+    const output: favicon.FavIconResponse | undefined = await generateFavicons(this, pluginConfig)
+
     if (!output) {
       return
     }
 
     // Just emit assets
     if (!cacheDir) {
-      processOutput(options, output, emit)
+      processOutput(options, output as favicon.FavIconResponse, emit as processFavicon)
       return
     }
 
     // Write cache and emit assets
     fs.mkdirSync(cacheDir, {recursive: true})
     fs.writeFileSync(cacheIndex, formatCacheIndex(output))
-    processOutput(options, output, (fout: IFaviconOutput) => {
+    processOutput(options, output as favicon.FavIconResponse, ((fout: IFaviconOutput) => {
       fs.writeFileSync(path.resolve(cacheDir, fout.name), fout.contents)
       return emit(fout)
-    })
+    }) as processFavicon)
   }
 })
 
