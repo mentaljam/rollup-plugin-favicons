@@ -1,18 +1,17 @@
 import {createHash} from 'crypto'
-import favicon, {Callback, FavIconResponse} from 'favicons'
+import favicons, {Configuration, FavIconResponse} from 'favicons'
 import fs from 'fs'
 import path from 'path'
 import objectHash from 'object-hash'
-import {OutputOptions, Plugin, PluginContext} from 'rollup'
+import {Plugin, PluginContext} from 'rollup'
 import {IExtendedOptions} from 'rollup-plugin-html2/dist/types'
 
 
 interface IPluginConfig {
   cache?:        boolean | string
-  configuration: Partial<favicon.Configuration>
+  configuration: Partial<Configuration>
   source:        string
-  callback?:     Callback;
-  emitAssets?:   boolean;
+  callback?:     (response: FavIconResponse) => void
 }
 
 interface IFaviconOutput {
@@ -21,12 +20,12 @@ interface IFaviconOutput {
 }
 
 interface ICacheIndex {
+  images: string[]
   files:  string[]
   html:   string[]
-  images: string[]
 }
 
-type PluginFactory = (config: IPluginConfig) => Plugin
+type RollupPluginFavicons = (config: IPluginConfig) => Plugin
 
 const checkCache = ({
   cache,
@@ -47,81 +46,61 @@ const checkCache = ({
   return [cacheDir, cacheIndex]
 }
 
-type processFavicon = (favicon: IFaviconOutput) => string
-type processFile    = (file: string)            => string
-type ProcessFunc = processFavicon | processFile;
-type ProcessData = favicon.FavIconResponse | ICacheIndex;
-
-function processOutput(
-    options:               OutputOptions,
-    {images, files, html}: favicon.FavIconResponse,
-    processor:             processFavicon,
-): void;
-function processOutput(
-    options:               OutputOptions,
-    {images, files, html}: ICacheIndex,
-    processor:             processFile,
-): void;
-function processOutput(
-  options:               OutputOptions,
-  {images, files, html}: ProcessData,
-  processor:             ProcessFunc,
-): void {
-  const fileMap: Record<string, string> = {}
-  const wrapper = (entry: IFaviconOutput | string) => {
-    const key = typeof entry === 'string'
-      ? entry
-      : entry.name
-    fileMap[key] = (processor as (e: unknown) => string)(entry)
-  }
-  images.forEach(wrapper)
-  const imagesRegex = new RegExp(Object.keys(fileMap).join('|').replace('.', '\\.'), 'gm')
-  files.forEach((f: IFaviconOutput | string) => {
-    if (typeof f !== 'string') {
-      f.contents = Buffer.from(f.contents.toString().replace(imagesRegex, substr => path.basename(fileMap[substr])))
-    }
-    wrapper(f)
-  });
-  (options as IExtendedOptions).__favicons_output = html
-    .map(s => s.replace(/href="(.*)"/, (href, file) => {
-        file = fileMap[path.basename(file)]
-        return file ? `href="${file}"` : href
-      })
-    )
-}
-
-function createResponseFromCache({ files, html, images }: ICacheIndex, cacheDir: string): FavIconResponse {
+const responseFromCache = (
+  cacheDir:   string,
+  cacheIndex: string,
+): FavIconResponse => {
+  const index = fs.readFileSync(cacheIndex).toString()
+  const {images, files, html} = JSON.parse(index) as ICacheIndex
+  const readFile = (name: string) => ({name, contents: fs.readFileSync(path.join(cacheDir, name))})
   return {
-    images: images.map((imageEntry => ({ name: imageEntry, contents: fs.readFileSync(path.join(cacheDir, imageEntry))}))),
-    files: files.map((fileEntry => ({ name: fileEntry, contents: fs.readFileSync(path.join(cacheDir, fileEntry))}))),
-    html: html.slice()
+    images: images.map(readFile),
+    files:  files.map(readFile),
+    html:   html.slice()
   }
 }
 
-const generateFavicons = (async (
-  context: PluginContext,
-  {source, configuration, callback }: IPluginConfig,
-) => {
-  try {
-    return await favicon(source, configuration, callback)
-  } catch (error) {
-    context.error(error)
-  }
-}) as (
-    context: PluginContext,
-    {source, configuration, callback }: IPluginConfig,
-) => Promise<favicon.FavIconResponse | undefined>;
-
-const formatCacheIndex = ({files, html, images}: favicon.FavIconResponse) => {
+const responseToCache = (
+  {images, files, html}: FavIconResponse,
+  cacheDir:              string,
+  cacheIndex:            string,
+): void => {
+  fs.mkdirSync(cacheDir, {recursive: true})
   const extractName = ({name}: IFaviconOutput) => name
-  return JSON.stringify({
-    files: files.map(extractName),
-    html,
+  fs.writeFileSync(cacheIndex, JSON.stringify({
     images: images.map(extractName),
-  })
+    files:  files.map(extractName),
+    html,
+  }))
+  const writeFile = ({name, contents}: IFaviconOutput) => fs.writeFileSync(path.resolve(cacheDir, name), contents)
+  images.forEach(writeFile)
+  files.forEach(writeFile)
 }
 
-const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
+const getFaviconResponse = async (
+  context:      PluginContext,
+  pluginConfig: IPluginConfig,
+) => {
+  const [cacheDir, cacheIndex] = checkCache(pluginConfig)
+
+  // Try to read cache
+  if (cacheDir && fs.existsSync(cacheDir) && fs.existsSync(cacheIndex)) {
+    return responseFromCache(cacheDir, cacheIndex)
+  }
+
+  // Try to generate favicons
+  const {source, configuration} = pluginConfig
+  const response = await favicons(source, configuration).catch(context.error)
+
+  // Write cache
+  if (cacheDir) {
+    responseToCache(response, cacheDir, cacheIndex)
+  }
+
+  return response
+}
+
+const pluginFavicons: RollupPluginFavicons = (pluginConfig) => ({
   name: 'favicons',
 
   buildStart() {
@@ -129,66 +108,53 @@ const pluginFavicons: PluginFactory = (pluginConfig: IPluginConfig) => ({
   },
 
   async generateBundle(options) {
-    const { emitAssets, configuration } = pluginConfig;
-    
-    if (typeof options.assetFileNames === 'string') {
-      configuration.path = path.dirname(options.assetFileNames)
-    }
-    
-    const emit = emitAssets !== false ? ({name, contents: source}: IFaviconOutput) => this.getFileName(this.emitFile({
-      name,
-      source,
-      type: 'asset',
-    })): ({ name }: IFaviconOutput) => path.join(configuration.path || '', name);
+    const {configuration, callback} = pluginConfig
 
-    const [cacheDir, cacheIndex] = checkCache(pluginConfig)
-
-    // Try to read cache
-    if (cacheDir && fs.existsSync(cacheDir) && fs.existsSync(cacheIndex)) {
-      const index  = fs.readFileSync(cacheIndex).toString()
-      const output = JSON.parse(index) as ICacheIndex
-
-      const { callback } = pluginConfig;
-
-      let callbackResponse;
-
-      if (callback) {
-        const responseFromCache = createResponseFromCache(output, cacheDir);
-        callbackResponse = callback(null, responseFromCache)
-      } else {
-        callbackResponse = true;
-      }
-
-      if (callbackResponse) {
-        processOutput(options, output as ICacheIndex, ((name: string) => {
-          const contents = fs.readFileSync(path.resolve(cacheDir, name))
-          return emit({name, contents})
-        }) as processFile)
-      }
-
-      return;
+    // If assets are generated and fivacons path was not set then try to set it to assets dir
+    if (!callback && !configuration.path && typeof options.assetFileNames === 'string') {
+      configuration.path = '/' + path.dirname(options.assetFileNames)
     }
 
-    // Try to generate files
-    const output: favicon.FavIconResponse | undefined = await generateFavicons(this, pluginConfig)
+    const response = await getFaviconResponse(this, pluginConfig)
 
-    if (!output) {
+    if (callback) {
+      // `rollup-plugin-html2` can use this property to include generated images and files
+      (options as IExtendedOptions).__favicons_output = response.html
+      callback(response)
       return
     }
 
-    // Just emit assets
-    if (!cacheDir) {
-      processOutput(options, output as favicon.FavIconResponse, emit as processFavicon)
-      return
+    // Real asset filenames can differ from what is written to `files` and `html`
+    const assetsMap: Record<string, string> = {}
+    const emitAsset = ({name, contents}: IFaviconOutput) => {
+      const id = this.emitFile({
+        name,
+        source: contents,
+        type: 'asset'
+      })
+      assetsMap[name] = '/' + this.getFileName(id)
     }
 
-    // Write cache and emit assets
-    fs.mkdirSync(cacheDir, {recursive: true})
-    fs.writeFileSync(cacheIndex, formatCacheIndex(output))
-    processOutput(options, output as favicon.FavIconResponse, ((fout: IFaviconOutput) => {
-      fs.writeFileSync(path.resolve(cacheDir, fout.name), fout.contents)
-      return emit(fout)
-    }) as processFavicon)
+    const {images, files, html} = response
+    // Map original names of the images to their actual paths
+    images.forEach(emitAsset)
+    // All known original names of the images
+    const imagesRegex = new RegExp(Object.keys(assetsMap).join('|').replace('.', '\\.'), 'gm')
+    files.forEach(f => {
+      // Replace original image paths with actual ones
+      f.contents = Buffer.from(f.contents.toString().replace(imagesRegex, substr => path.basename(assetsMap[substr])))
+      // Map original names of the files to their actual paths
+      emitAsset(f)
+    });
+
+    // `rollup-plugin-html2` can use this property to include generated images and files
+    (options as IExtendedOptions).__favicons_output = html
+      // Replace original image and file paths with actual ones
+      .map(s => s.replace(/(href|content)="(.*)"/, (entry, key, file) => {
+          file = assetsMap[path.basename(file)]
+          return file ? `${key}="${file}"` : entry
+        })
+      )
   }
 })
 
