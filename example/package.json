@@ -5,7 +5,7 @@
   "author": "Petr Tsymbarovich <petr@tsymbarovich.ru>",
   "license": "MIT",
   "scripts": {
-    "build": "npm run build:assets & build:custom-dir",
+    "build": "npm run build:assets & npm run build:custom-dir",
     "build:assets": "rollup -c rollup.config.assets.js",
     "build:custom-dir": "rollup -c rollup.config.custom-dir.js"
   },
