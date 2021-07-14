@@ -10,8 +10,8 @@
     "build:custom-dir": "rollup -c rollup.config.custom-dir.js"
   },
   "devDependencies": {
-    "rollup": "^2.52.4",
+    "rollup": "^2.53.1",
     "rollup-plugin-favicons": "../",
-    "rollup-plugin-html2": "^2.0.0"
+    "rollup-plugin-html2": "^3.0.0"
   }
 }
