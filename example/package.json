@@ -4,14 +4,15 @@
   "description": "Usage example for the rollup-plugin-favicons.",
   "author": "Petr Tsymbarovich <petr@tsymbarovich.ru>",
   "license": "MIT",
+  "type": "module",
   "scripts": {
     "build": "npm run build:assets & npm run build:custom-dir",
     "build:assets": "rollup -c rollup.config.assets.js",
     "build:custom-dir": "rollup -c rollup.config.custom-dir.js"
   },
   "devDependencies": {
-    "rollup": "^2.75.7",
+    "rollup": "^3.19",
     "rollup-plugin-favicons": "../",
-    "rollup-plugin-html2": "^3.1.0"
+    "rollup-plugin-html2": "^3.1"
   }
 }

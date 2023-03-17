@@ -8,9 +8,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "newLine": "lf",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "outDir": "dist"
   },
   "include": [
-    "../src"
+    "src"
   ]
 }

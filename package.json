@@ -1,6 +1,6 @@
 {
   "name": "rollup-plugin-favicons",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Rollup plugin to generating favicons and their associated files.",
   "author": "Petr Tsymbarovich <petr@tsymbarovich.ru>",
   "license": "MIT",
@@ -17,9 +17,14 @@
   "bugs": {
     "url": "https://github.com/mentaljam/rollup-plugin-favicons/issues"
   },
-  "main": "dist/cjs/index.js",
-  "module": "dist/esm/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/cjs/index.cjs"
+    }
+  },
   "files": [
     "dist",
     "LICENSE",
@@ -27,11 +32,10 @@
   ],
   "scripts": {
     "build": "npm run build:cjs && npm run build:esm && npm run build:types",
-    "build:cjs": "tsc -p config/cjs.json",
-    "build:esm": "tsc -p config/esm.json",
-    "build:types": "tsc -p config/types.json",
+    "build:cjs": "tsc -m commonjs --outDir dist/cjs",
+    "build:esm": "tsc -m es6",
+    "build:types": "tsc -d --emitDeclarationOnly",
     "check": "tsc -p config/base.json --noEmit",
-    "lint": "eslint -p .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
@@ -41,14 +45,14 @@
   "devDependencies": {
     "@types/favicons": "^6.2.2",
     "@types/html-minifier": "^4.0.2",
-    "@types/node": "^18.0.3",
-    "@types/object-hash": "^2.2.1",
-    "rollup": "^2.75.7",
+    "@types/node": "^18.15.3",
+    "@types/object-hash": "^3.0.2",
+    "rollup": "^3.19.1",
     "rollup-plugin-html2": "^3.1.0",
-    "typescript": "^4.7.4"
+    "typescript": "^5.0.2"
   },
   "peerDependencies": {
-    "rollup": ">=1.25.0",
-    "rollup-plugin-html2": ">=0.7.0"
+    "rollup": ">=1.25",
+    "rollup-plugin-html2": ">=0.7"
   }
 }

@@ -7,9 +7,13 @@ import {Plugin, PluginContext} from 'rollup'
 import {IExtendedOptions} from 'rollup-plugin-html2/dist/types'
 
 
+type DeepMutable<T> = {
+  -readonly [P in keyof T]: DeepMutable<T[P]>
+}
+
 interface IPluginConfig {
   cache?:        boolean | string
-  configuration: Partial<FaviconOptions>
+  configuration: Partial<DeepMutable<FaviconOptions>>
   source:        string
   callback?:     (response: FaviconResponse) => void
 }
@@ -87,7 +91,7 @@ const getFaviconResponse = async (
 
   // Try to generate favicons
   const {source, configuration} = pluginConfig
-  const response = await favicons(source, configuration).catch(context.error)
+  const response = await favicons(source, configuration as FaviconOptions).catch(context.error)
 
   // Write cache
   if (cacheDir) {
@@ -107,7 +111,7 @@ const pluginFavicons: RollupPluginFavicons = (pluginConfig) => ({
   async generateBundle(options) {
     const {configuration, callback} = pluginConfig
 
-    // If assets are generated and fivacons path was not set then try to set it to assets dir
+    // If assets are generated and favicons path was not set then try to set it to assets dir
     if (!callback && !configuration.path && typeof options.assetFileNames === 'string') {
       configuration.path = '/' + path.dirname(options.assetFileNames)
     }
@@ -137,11 +141,11 @@ const pluginFavicons: RollupPluginFavicons = (pluginConfig) => ({
     images.forEach(emitAsset)
     // All known original names of the images
     const imagesRegex = new RegExp(Object.keys(assetsMap).join('|').replace('.', '\\.'), 'gm')
-    files.forEach(f => {
+    files.forEach(({name, contents}) => {
       // Replace original image paths with actual ones
-      f.contents = f.contents.toString().replace(imagesRegex, substr => path.basename(assetsMap[substr]))
+      contents = contents.replace(imagesRegex, substr => path.basename(assetsMap[substr]))
       // Map original names of the files to their actual paths
-      emitAsset(f)
+      emitAsset({name, contents})
     });
 
     // `rollup-plugin-html2` can use this property to include generated images and files
